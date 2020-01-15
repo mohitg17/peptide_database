@@ -3,7 +3,6 @@ import pandas as pd
 from sqlalchemy import create_engine
 import aa_nt
 
-
 def show_table(name):
     query = "SELECT * FROM {}".format(name)
     cursor.execute(query)
@@ -33,21 +32,18 @@ def batch_update(filename, table):
     new_data = pd.read_csv(filename)
     frames = [current_data, new_data]
     combined_data = pd.concat(frames, sort=False)
-    print(combined_data)
-
-    # duplicates = combined_data[combined_data.duplicated(subset=['name', 'peptide_seq'])]
-    # print(duplicates)
-    # duplicates.to_csv(path_or_buf='duplicates.csv')
 
     combined_data.drop_duplicates(inplace=True, subset=['name'])
     combined_data.to_csv(path_or_buf='combined.csv')
 
-    df = pd.read_csv('combined.csv')
-    df.to_sql(table, con=engine, if_exists='replace')
+    create_table("temp", "combined.csv")
 
- # add which column is duplicated (name or peptide sequencd
- # add amino acid position column
- # add effect type column
+    query = "DROP TABLE {}".format(table)
+    cursor.execute(query)
+    query = "RENAME TABLE temp TO {}".format(table)
+    cursor.execute(query)
+
+
 def compare(filename, table):
     query = "SELECT * FROM {}".format(table)
     current_data = pd.read_sql(query, cnx)
@@ -55,7 +51,14 @@ def compare(filename, table):
     frames = [current_data, new_data]
     combined_data = pd.concat(frames, sort=False).reset_index()
 
-    duplicates = combined_data[combined_data.duplicated(subset=['name', 'peptide_seq'])]
+    duplicate_name = combined_data[combined_data.duplicated(subset=['name'])]
+    duplicate_seq = combined_data[combined_data.duplicated(subset=['peptide_seq'])]
+    duplicate_name.loc[:, 'duplicated'] = ""
+    duplicate_seq.loc[:, 'duplicated'] = ""
+    duplicate_name.loc[:, 'duplicated'] = 'name'
+    duplicate_seq.loc[:, 'duplicated'] = 'seq'
+    frames = [duplicate_name, duplicate_seq]
+    duplicates = pd.concat(frames, sort=False)
     duplicates.to_csv(path_or_buf='duplicates.csv')
 
     frames2 = [duplicates, new_data]
@@ -80,6 +83,8 @@ def create_table(table, filename):
     "   peptide_buffer VARCHAR(255) NULL,"
     "   peptide_concentration VARCHAR(255) NULL,"
     "   origin VARCHAR(255) NOT NULL,"
+    "   amino acid position VARCHAR(255) NULL,"
+    "   effect type VARCHAR(255) NULL,"
     "   peptide_vendor VARCHAR(255) NULL,"
     "   peptide_date VARCHAR(255) NULL,"
     "   person VARCHAR(255) NULL"
@@ -89,6 +94,7 @@ def create_table(table, filename):
     df = pd.read_csv(filename)
     print(df)
     df.to_sql(table, con=engine, if_exists='replace')
+
 
 if __name__ == "__main__":
     cnx = mysql.connector.connect(user='root', password="#peptideDB19",
